@@ -1,70 +1,124 @@
 // Slot Machine Game Logic
 
-// Symbol definitions with weights
+// Symbol definitions with weights (Halloween themed!)
 const BASE_SYMBOLS = {
-    '🍒': { weight: 30, payout: 2 },
-    '🍋': { weight: 25, payout: 3 },
-    '🍊': { weight: 20, payout: 4 },
-    '🍇': { weight: 15, payout: 5 },
-    '💎': { weight: 8, payout: 10 },
-    '⭐': { weight: 2, payout: 50 }
+    '🎃': { weight: 30, payout: 2 },
+    '👻': { weight: 25, payout: 3 },
+    '🦇': { weight: 20, payout: 4 },
+    '💀': { weight: 15, payout: 5 },
+    '🕷️': { weight: 8, payout: 10 },
+    '🧙': { weight: 2, payout: 50 }
 };
 
 // Game state
 let symbols = JSON.parse(JSON.stringify(BASE_SYMBOLS));
-let oddsMultiplier = 1.0;
-let guaranteedWin = false;
 let isSpinning = false;
-let soundEnabled = true;
 
-// Audio context for sound effects
+// ============================================
+// SETTINGS - Configure these values here
+// ============================================
+let oddsMultiplier = 1.0;      // 1.0 = normal odds, >1.0 = better odds, <1.0 = worse odds
+let guaranteedWin = false;      // Set to true to always win (for testing)
+let soundEnabled = true;        // Set to true to enable sound effects
+let musicEnabled = true;        // Set to true to enable background music
+// ============================================
+
+// Audio files (only for music and victory)
+const AUDIO_FILES = {
+    backgroundMusic: 'sounds/background-music.mp3',
+    victory: 'sounds/victory.mp3'
+};
+
+// Background music and victory audio objects
+let backgroundMusic = null;
+let victoryAudio = null;
+let musicStarted = false; // Track if music has been started by user interaction
+
+// Audio context for simple synthesizer sounds
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-// Color mapping for win animations
+// Color mapping for win animations (Halloween colors!)
 const SYMBOL_COLORS = {
-    '🍒': '#e74c3c',
-    '🍋': '#f1c40f',
-    '🍊': '#e67e22',
-    '🍇': '#9b59b6',
-    '💎': '#3498db',
-    '⭐': '#f39c12'
+    '🎃': '#ff6b35',
+    '👻': '#f0f0f0',
+    '🦇': '#9b4dca',
+    '💀': '#e0e0e0',
+    '🕷️': '#8b0000',
+    '🧙': '#ff8c00'
 };
+
+// Preload all audio files
+function preloadAudio() {
+    // Setup background music
+    backgroundMusic = new Audio(AUDIO_FILES.backgroundMusic);
+    backgroundMusic.loop = true;
+    backgroundMusic.volume = 0.008; // Lower volume for background music
+    backgroundMusic.preload = 'auto';
+
+    // Setup victory sound
+    victoryAudio = new Audio(AUDIO_FILES.victory);
+    victoryAudio.volume = 0.01;
+    victoryAudio.preload = 'auto';
+}
+
+// Simple synthesizer sound effects
+function playBeep(frequency, duration, volume = 0.3) {
+    if (!soundEnabled) return;
+
+    const now = audioContext.currentTime;
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = frequency;
+    oscillator.type = 'sine';
+
+    gainNode.gain.setValueAtTime(volume, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
+
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+}
 
 // Initialize game
 document.addEventListener('DOMContentLoaded', () => {
-    loadConfig();
+    preloadAudio();
+    initializeSettings();
     setupEventListeners();
 });
 
-// Load configuration from localStorage
-function loadConfig() {
-    const config = JSON.parse(localStorage.getItem('slotMachineConfig') || '{}');
-    oddsMultiplier = config.odds_multiplier || 1.0;
-    guaranteedWin = config.guaranteed_win || false;
-    soundEnabled = config.sound_enabled !== false;
-
+// Initialize settings (no localStorage needed)
+function initializeSettings() {
     updateOdds(oddsMultiplier);
     updateGuaranteedWinUI();
     updateSoundButton();
-}
+    updateMusicButton();
 
-// Save configuration to localStorage
-function saveConfig() {
-    const config = {
-        odds_multiplier: oddsMultiplier,
-        guaranteed_win: guaranteedWin,
-        sound_enabled: soundEnabled
-    };
-    localStorage.setItem('slotMachineConfig', JSON.stringify(config));
+    // Note: Don't try to autoplay here - browsers block it
+    // Music will start on first user interaction via tryStartMusic()
 }
 
 // Setup event listeners
 function setupEventListeners() {
     // Spin button
-    document.getElementById('spin-button').addEventListener('click', spin);
+    document.getElementById('spin-button').addEventListener('click', () => {
+        tryStartMusic();
+        spin();
+    });
 
     // Sound toggle
-    document.getElementById('sound-button').addEventListener('click', toggleSound);
+    document.getElementById('sound-button').addEventListener('click', () => {
+        tryStartMusic();
+        toggleSound();
+    });
+
+    // Music toggle
+    document.getElementById('music-button').addEventListener('click', () => {
+        tryStartMusic();
+        toggleMusic();
+    });
 
     // Symbols modal
     const modal = document.getElementById('symbols-modal');
@@ -72,6 +126,7 @@ function setupEventListeners() {
     const closeBtn = document.querySelector('.close');
 
     symbolsBtn.addEventListener('click', () => {
+        tryStartMusic();
         modal.style.display = 'block';
     });
 
@@ -97,7 +152,6 @@ function setupEventListeners() {
 function toggleSound() {
     soundEnabled = !soundEnabled;
     updateSoundButton();
-    saveConfig();
 }
 
 function updateSoundButton() {
@@ -105,11 +159,56 @@ function updateSoundButton() {
     btn.textContent = soundEnabled ? '🔊 Sound: ON' : '🔇 Sound: OFF';
 }
 
+// Toggle music on/off
+function toggleMusic() {
+    musicEnabled = !musicEnabled;
+    updateMusicButton();
+
+    if (musicEnabled) {
+        playBackgroundMusic();
+    } else {
+        stopBackgroundMusic();
+    }
+}
+
+function updateMusicButton() {
+    const btn = document.getElementById('music-button');
+    btn.textContent = musicEnabled ? '🎵 Music: ON' : '🎵 Music: OFF';
+}
+
+// Play background music
+function playBackgroundMusic() {
+    if (!backgroundMusic || !musicEnabled) return;
+
+    backgroundMusic.play()
+        .then(() => {
+            musicStarted = true; // Only set flag if play succeeded
+        })
+        .catch(err => {
+            // Browser blocked autoplay, will try again on user interaction
+            console.warn('Background music blocked:', err);
+        });
+}
+
+// Try to start music on first user interaction
+function tryStartMusic() {
+    if (!musicStarted && musicEnabled && backgroundMusic) {
+        playBackgroundMusic();
+    }
+}
+
+// Stop background music
+function stopBackgroundMusic() {
+    if (!backgroundMusic) return;
+
+    backgroundMusic.pause();
+    backgroundMusic.currentTime = 0;
+}
+
 // Toggle guaranteed win
 function toggleGuaranteedWin() {
     guaranteedWin = !guaranteedWin;
     updateGuaranteedWinUI();
-    saveConfig();
 }
 
 function updateGuaranteedWinUI() {
@@ -173,105 +272,44 @@ function getWeightedSymbol() {
 
 // Play spinning sound
 function playSpinSound() {
-    if (!soundEnabled) return;
-
-    const now = audioContext.currentTime;
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-
-    gainNode.gain.setValueAtTime(0.2, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-
-    oscillator.start(now);
-    oscillator.stop(now + 0.1);
+    playBeep(800, 0.1, 0.2);
 }
 
 // Play reel stop sound
 function playReelStopSound() {
-    if (!soundEnabled) return;
-
-    const now = audioContext.currentTime;
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.frequency.value = 600;
-    oscillator.type = 'sine';
-
-    gainNode.gain.setValueAtTime(0.2, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
-
-    oscillator.start(now);
-    oscillator.stop(now + 0.05);
+    playBeep(400, 0.05, 0.2);
 }
 
-// Play sound for symbol
-function playSymbolSound(symbol) {
-    if (!soundEnabled) return;
+// Play victory sound (from audio file)
+function playVictorySound() {
+    if (!soundEnabled || !victoryAudio) return;
 
-    const now = audioContext.currentTime;
+    // Pause background music during victory sound
+    const wasMusicPlaying = backgroundMusic && !backgroundMusic.paused;
+    if (wasMusicPlaying) {
+        backgroundMusic.pause();
+    }
 
-    // Symbol-specific melodies
-    const melodies = {
-        '🍒': [523, 587, 659],
-        '🍋': [659, 784, 880],
-        '🍊': [392, 494, 523, 659],
-        '🍇': [659, 523, 784, 659, 880],
-        '💎': [1047, 1319, 1568, 2093],
-        '⭐': [523, 659, 784, 1047, 1319, 1568]
-    };
-
-    const frequencies = melodies[symbol] || [440];
-    const noteDuration = symbol === '⭐' ? 0.18 : 0.15;
-
-    frequencies.forEach((freq, index) => {
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        oscillator.frequency.value = freq;
-        oscillator.type = 'sine';
-
-        const startTime = now + (index * noteDuration);
-        const endTime = startTime + noteDuration;
-
-        gainNode.gain.setValueAtTime(0.3, startTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, endTime);
-
-        oscillator.start(startTime);
-        oscillator.stop(endTime);
+    victoryAudio.currentTime = 0;
+    victoryAudio.play().catch(err => {
+        console.warn('Could not play victory sound:', err);
     });
 
-    // Extra long note for star
-    if (symbol === '⭐') {
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        oscillator.frequency.value = 1047;
-        oscillator.type = 'sine';
-
-        const startTime = now + (frequencies.length * noteDuration);
-        const endTime = startTime + 0.4;
-
-        gainNode.gain.setValueAtTime(0.3, startTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, endTime);
-
-        oscillator.start(startTime);
-        oscillator.stop(endTime);
+    // Resume background music after victory sound ends
+    if (wasMusicPlaying) {
+        victoryAudio.addEventListener('ended', () => {
+            if (musicEnabled && backgroundMusic) {
+                backgroundMusic.play().catch(err => {
+                    console.warn('Could not resume background music:', err);
+                });
+            }
+        }, { once: true }); // Use 'once' so listener is removed after first trigger
     }
+}
+
+// Play lose sound
+function playLoseSound() {
+    playBeep(200, 0.3, 0.15);
 }
 
 // Animate reel spinning
@@ -317,7 +355,6 @@ async function spin() {
         result = [winSymbol, winSymbol, winSymbol];
         guaranteedWin = false;
         updateGuaranteedWinUI();
-        saveConfig();
     } else {
         result = [
             getWeightedSymbol(),
@@ -365,8 +402,8 @@ async function spin() {
             reel.style.borderColor = SYMBOL_COLORS[symbol];
         });
 
-        // Play sound
-        playSymbolSound(symbol);
+        // Play victory sound
+        playVictorySound();
 
         // Update status with color
         status.textContent = `🎉 YOU WIN! ${symbol} ${symbol} ${symbol} - ${payout}x! 🎉`;
@@ -388,6 +425,7 @@ async function spin() {
         // No win
         status.textContent = '😢 No match. Try again!';
         status.style.color = 'white';
+        playLoseSound();
     }
 
     isSpinning = false;
