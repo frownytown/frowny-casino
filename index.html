@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎰 Slot Machine 🎰</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="title">
+            <h1>🎰 SLOT MACHINE 🎰</h1>
+        </div>
+
+        <div class="reels-container">
+            <div class="reel" id="reel-0">🍒</div>
+            <div class="reel" id="reel-1">🍒</div>
+            <div class="reel" id="reel-2">🍒</div>
+        </div>
+
+        <div class="status" id="status">Press SPIN to play!</div>
+
+        <button class="spin-button" id="spin-button">SPIN</button>
+
+        <div class="controls">
+            <button class="control-button" id="symbols-button">View Symbols</button>
+            <button class="control-button sound-button" id="sound-button">🔊 Sound: ON</button>
+        </div>
+
+    </div>
+
+    <!-- Symbol Info Modal -->
+    <div class="modal" id="symbols-modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>🎰 SYMBOLS 🎰</h2>
+            <p class="subtitle">Match 3 Symbols to Win!</p>
+            <div class="symbol-list">
+                <div class="symbol-item star">⭐ ⭐ ⭐ - STAR - Jackpot!</div>
+                <div class="symbol-item diamond">💎 💎 💎 - DIAMOND - Rare!</div>
+                <div class="symbol-item grape">🍇 🍇 🍇 - GRAPE - Premium</div>
+                <div class="symbol-item orange">🍊 🍊 🍊 - ORANGE - Good</div>
+                <div class="symbol-item lemon">🍋 🍋 🍋 - LEMON - Nice</div>
+                <div class="symbol-item cherry">🍒 🍒 🍒 - CHERRY - Common</div>
+            </div>
+            <p class="hint">💡 Each symbol has a unique sound and animation!</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
